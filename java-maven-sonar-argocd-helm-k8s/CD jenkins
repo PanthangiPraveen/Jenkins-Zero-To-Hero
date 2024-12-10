@@ -1,0 +1,47 @@
+pipeline {
+    agent any
+    
+    parameters {
+        string(name: 'DOCKER_IMAGE', defaultValue: 'abhishekf5/ultimate-cicd', description: 'Docker image name')
+        string(name: 'GIT_USER_NAME', defaultValue: 'iam-veeramalla', description: 'GitHub Username')
+        string(name: 'GIT_REPO_NAME', defaultValue: 'Jenkins-Zero-To-Hero', description: 'GitHub Repository Name')
+        string(name: 'BRANCH', defaultValue: 'main', description: 'Branch to build')
+    }
+
+    stages {
+        stage('Update Deployment File') {
+            steps {
+                withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                    sh """
+                    git config user.email 'abhishek.xyz@gmail.com' && \
+                    git config user.name 'Abhishek Veeramalla' && \
+                    sed -i 's|replaceImageTag|${BUILD_NUMBER}|g' java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml && \
+                    git add java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml && \
+                    git commit -m 'Update deployment image to version ${BUILD_NUMBER}' && \
+                    git push https://${GITHUB_TOKEN}@github.com/${params.GIT_USER_NAME}/${params.GIT_REPO_NAME} HEAD:${params.BRANCH}
+                    """
+                }
+            }
+        }
+    }
+    post {
+        success {
+            script {
+                // Post-deployment steps
+                sh 'echo "Post-deployment steps..."'
+                
+                // Notifications
+                slackSend(channel: '#deployments', message: "CD deployment succeeded for build ${BUILD_NUMBER}")
+            }
+        }
+        failure {
+            script {
+                // Notifications
+                slackSend(channel: '#deployments', message: "CD deployment failed for build ${BUILD_NUMBER}")
+            }
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
